@@ -5,6 +5,7 @@ import plotly.graph_objects as go
 import plotly.colors as pc
 from pathlib import Path
 from plotly.subplots import make_subplots
+from functools import lru_cache
 
 from dash import Dash, dcc, html, Input, Output
 
@@ -15,7 +16,10 @@ from dash import Dash, dcc, html, Input, Output
 vortex_path = Path("data_processed/vortex/vortex_all.csv")
 temp_folder = Path("data_processed/temp_clean")
 
-
+@lru_cache(maxsize=2)
+def load_mean_temps(grid_resolution):
+    path = temp_folder / f"mean_temps_{grid_resolution}.csv"
+    return pd.read_csv(path)
 
 df_vortex = pd.read_csv(vortex_path, parse_dates=["date"], low_memory=False)
 
@@ -159,7 +163,7 @@ app.layout = html.Div([
 )
 def update_vortex_graph(selected_winters, mode, selected_date):
     if not selected_winters:
-        selected_winters = ["2012-2013"]
+        selected_winters = ["2024-2025"]
 
     selected_winters = sorted(selected_winters)
 
@@ -219,7 +223,7 @@ def update_vortex_graph(selected_winters, mode, selected_date):
         fig.update_yaxes(title_text="Vortex strength", row=1, col=1)
 
         fig.update_layout(
-            title="Polar vortex strength by winter",
+            title="Polar vortex strength (zonal wind speed)",
             width=graph_width,
             height=350,
             hovermode="closest",
@@ -228,15 +232,20 @@ def update_vortex_graph(selected_winters, mode, selected_date):
         )
 
     else:
+        if len(selected_winters) <= 1:
+            title = f"Polar vortex strength (zonal wind speed) on winter {selected_winters[0]}"
+        else:
+            title = "Polar vortex strength (zonal wind speed) comparison"
+
         fig = px.line(
             filtered,
             x="winter_date",
             y="vortex_strength",
             color="winter",
-            title="Polar vortex strength comparison",
+            title=title,
             labels={
                 "winter_date": "Date in winter season",
-                "vortex_strength": "Vortex strength"
+                "vortex_strength": "Vortex strength (m/s)"
             },
             custom_data=["date_str"],
             color_discrete_map=winter_color_map,
@@ -347,15 +356,24 @@ def update_map(selected_date, map_variable, grid_resolution):
 
     df_temp_year = pd.read_csv(file_path, parse_dates=["date"])
 
-    if "temp_anomaly" not in df_temp_year.columns:
-        df_temp_year["temp_anomaly"] = df_temp_year["temp_c"]
-
     df_day = df_temp_year[df_temp_year["date"] == selected_ts].copy()
 
     if df_day.empty:
         fig = go.Figure()
         fig.update_layout(title=f"No data for {selected_date}")
         return fig, f"Selected date: {selected_date}"
+    
+    df_day["dayofyear"] = df_day["date"].dt.dayofyear
+
+    df_clim = load_mean_temps(grid_resolution)
+
+    df_day = df_day.merge(
+        df_clim,
+        on=["latitude", "longitude", "dayofyear"],
+        how="left"
+    )
+
+    df_day["temp_anomaly"] = df_day["temp_c"] - df_day["mean_temp_c"]
 
     title_variable = (
         "Temperature anomaly"
@@ -366,9 +384,15 @@ def update_map(selected_date, map_variable, grid_resolution):
 
     if not vortex_row.empty:
         vortex_strength = vortex_row["vortex_strength"].iloc[0]
-        title = f"{title_variable} on {selected_date} | Vortex strength: {vortex_strength:.1f}"
+        title = f"{title_variable} on {selected_date} | Vortex strength: {vortex_strength:.1f} m/s"
     else:
         title = f"{title_variable} on {selected_date}"
+
+    if map_variable == "temp_c":
+        color_range = [-50, 35]      # absolute temperature in °C
+
+    else:
+        color_range = [-20, 20]      # anomaly in °C
 
     fig = px.scatter_geo(
         df_day,
@@ -376,6 +400,7 @@ def update_map(selected_date, map_variable, grid_resolution):
         lon="longitude",
         color=map_variable,
         color_continuous_scale="RdBu_r",
+        range_color=color_range,
         projection="natural earth",
         title=title,
     )
@@ -394,11 +419,12 @@ def update_map(selected_date, map_variable, grid_resolution):
         lataxis_range=[25, 90],
     )
 
+    
     fig.update_layout(
         height=500,
         margin=dict(l=40, r=80, t=60, b=20),
         coloraxis_colorbar=dict(
-            title=map_variable,
+            title="°C",
             len=0.75,
             y=0.5
         )
