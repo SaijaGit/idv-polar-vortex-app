@@ -21,6 +21,11 @@ def load_mean_temps(grid_resolution):
     path = temp_folder / f"mean_temps_{grid_resolution}.csv"
     return pd.read_csv(path)
 
+@lru_cache(maxsize=20)
+def load_temp_year(year, grid_resolution):
+    path = temp_folder / f"temp_{year}_{grid_resolution}.csv"
+    return pd.read_csv(path, parse_dates=["date"])
+
 df_vortex = pd.read_csv(vortex_path, parse_dates=["date"], low_memory=False)
 
 # Poistetaan karkauspäivät ennen fake-päivämäärän luomista
