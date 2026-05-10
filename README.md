@@ -9,6 +9,8 @@ The visualization combines a polar vortex strength timeline with an interactive 
 
 The project is implemented as an interactive Dash application using Plotly visualizations and ERA5 climate reanalysis data.
 
+A link to online visualization: https://idv-polar-vortex-app.onrender.com
+
 Run locally:
 
 ```
