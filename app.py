@@ -135,6 +135,8 @@ app = Dash(
     title="Polar vortex and winter temperatures"
 )
 
+server = app.server
+
 info_icon_style = {
     "cursor": "pointer",
     "color": "#0d6efd",
